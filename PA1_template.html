@@ -132,8 +132,9 @@ img {
     } else {
       row['steps']
     }
-  }))
-  total_steps_by_date_filled &lt;- aggregate(steps ~ date, filled, FUN=sum, na.rm=TRUE, na.action=na.pass)
+  }))</code></pre>
+<p>After adding the missing data, repeating the earlier analysis gives a new graph along with new mean and median steps per day.</p>
+<pre class="r"><code>  total_steps_by_date_filled &lt;- aggregate(steps ~ date, filled, FUN=sum, na.rm=TRUE, na.action=na.pass)
   mean_steps_filled &lt;- mean(total_steps_by_date_filled$steps)
   median_steps_filled &lt;- median(total_steps_by_date_filled$steps)
   ggplot(total_steps_by_date_filled, aes(x=steps)) + geom_histogram(binwidth=2000) +

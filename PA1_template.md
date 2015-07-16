@@ -97,6 +97,11 @@ average steps taken at different intervals varies by multiple orders of magnitud
       row['steps']
     }
   }))
+```
+After adding the missing data, repeating the earlier analysis gives a new graph along with new mean and median steps per day.
+
+
+```r
   total_steps_by_date_filled <- aggregate(steps ~ date, filled, FUN=sum, na.rm=TRUE, na.action=na.pass)
   mean_steps_filled <- mean(total_steps_by_date_filled$steps)
   median_steps_filled <- median(total_steps_by_date_filled$steps)
@@ -107,7 +112,7 @@ average steps taken at different intervals varies by multiple orders of magnitud
   theme(legend.title=element_blank())
 ```
 
-![](figure/add_missing-1.png) 
+![](figure/redo_analysis-1.png) 
 
 The mean and median steps taken per day changes as a result and the mean and median in the new data set are the same, which is unsuprising as replacing missing days of data with mean values inflates the frequency of the average case.
 
