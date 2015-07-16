@@ -1,25 +1,102 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+author: "Geoffrey Esposito"
+date: "07/13/2015"
+output: html_document
+keep_md: true
 ---
 
+First, set some options.
+```{r set_options, echo=TRUE, message=FALSE}
+  require(knitr)
+  opts_chunk$set(echo = TRUE, cache = TRUE, cache.path = "cache/", fig.path = "figure/")
+```
 
 ## Loading and preprocessing the data
-
+The data is read in from the provided CSV file. No additional preprocessing is performed on it.
+```{r read_data}
+  unzip("activity.zip")
+  data <- read.csv("activity.csv", colClasses=c("numeric","Date","numeric"))
+  summary(data)
+```
 
 
 ## What is mean total number of steps taken per day?
+For the initial measurements, NA values are simply ignored.
+```{r mean_median}
+  library(ggplot2)
+  total_steps_by_date <- aggregate(steps ~ date, data, FUN=sum, na.rm=TRUE, na.action=na.pass)
+  mean_steps <- mean(total_steps_by_date$steps)
+  median_steps <- median(total_steps_by_date$steps)
+  ggplot(total_steps_by_date, aes(x=steps)) + geom_histogram(binwidth=2000) +
+  geom_vline(aes(xintercept=mean_steps, color="Mean", linetype="Mean"), show_guide=TRUE) +
+  geom_vline(aes(xintercept=median_steps, color="Median", linetype="Median"), show_guide=TRUE) +
+  labs(x="Total Steps", y = "Days (Count)", title="Frequency of Total Daily Step Counts (Binsize: 2000)") +
+  theme(legend.title=element_blank())
+```
 
-
+The mean number of steps taken per day is **`r sprintf( "%.0f",mean_steps)`**.  
+The median number of steps taken per day is **`r sprintf( "%.0f",median_steps)`**.
 
 ## What is the average daily activity pattern?
-
+```{r daily_activity}
+  ggplot(data, aes(x=interval, y=steps)) + stat_summary(fun.y="mean", geom="line", na.rm=TRUE) +
+  labs(x="Interval", y="Average Steps", title="Average Steps By Interval")
+```
 
 
 ## Imputing missing values
+```{r count_missing}
+  missing_count <- sum(is.na(data))
+```
+Unfortunately the data is missing quite a few values, **`r sprintf( "%.0f",missing_count)`** to be exact.
+
+Missing data is filled in by taking the average for that interval accross days. This seems more appropriate than taking the average for the day as the
+average steps taken at different intervals varies by multiple orders of magnitude.
 
 
+```{r add_missing}
+  filled <- data
+  mean_steps_by_interval <- aggregate(steps ~ interval, filled, FUN=mean, na.rm=TRUE, na.action=na.pass)
+  filled$steps <- as.numeric(apply(filled, 1, function(row){
+    if(is.na(row['steps'])){
+      row['steps'] <- mean_steps_by_interval[mean_steps_by_interval$interval == as.numeric(row['interval']),]$steps
+    } else {
+      row['steps']
+    }
+  }))
+  total_steps_by_date_filled <- aggregate(steps ~ date, filled, FUN=sum, na.rm=TRUE, na.action=na.pass)
+  mean_steps_filled <- mean(total_steps_by_date_filled$steps)
+  median_steps_filled <- median(total_steps_by_date_filled$steps)
+  ggplot(total_steps_by_date_filled, aes(x=steps)) + geom_histogram(binwidth=2000) +
+  geom_vline(aes(xintercept=mean_steps_filled, color="Mean", linetype="Mean"), show_guide=TRUE) +
+  geom_vline(aes(xintercept=median_steps_filled, color="Median", linetype="Median"), show_guide=TRUE) +
+  labs(x="Total Steps", y = "Days (Count)", title="Frequency of Total Daily Step Counts (Binsize: 2000)") +
+  theme(legend.title=element_blank())
+```
+
+The mean and median steps taken per day changes as a result and the mean and median in the new data set are the same, which is unsuprising as replacing missing days of data with mean values inflates the frequency of the average case.
+
+The new mean number of steps taken per day is **`r sprintf( "%.0f",mean_steps_filled)`**.  
+The new median number of steps taken per day is **`r sprintf( "%.0f",median_steps_filled)`**.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+To calculate this, a new column must first be added to the filled data set to indicate wether a record corresponds to a weekday or not.
+```{r add_weekend}
+  filled$weekend <- as.factor(sapply(weekdays(data$date), function(day){
+    if(day == "Saturday" || day == "Sunday"){
+      "Weekend"
+    }else{
+      "Weekday"
+    }
+  }, USE.NAMES = FALSE))
+```
+
+Then the data is graphed seperately for weekdays and weekends.
+```{r weekend_activity}
+  ggplot(filled, aes(x=interval, y=steps)) + stat_summary(fun.y="mean", geom="line", na.rm=TRUE) +
+  facet_wrap(~weekend, ncol = 1) +
+  labs(x="Interval", y="Average Steps", title="Average Steps By Interval")
+```
+
+Unsuprisingly the weekday data has more spikes to it due to the timing of the workday while weekend data is generally more consistent throughout the day.
