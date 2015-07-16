@@ -1,186 +1,141 @@
 # Reproducible Research: Peer Assessment 1
+Geoffrey Esposito  
+07/13/2015  
 
+First, set some options.
+
+```r
+  require(knitr)
+  opts_chunk$set(echo = TRUE, cache = TRUE, cache.path = "cache/", fig.path = "figure/")
+```
 
 ## Loading and preprocessing the data
+First, the data is read in from the provided CSV file. 
+
+```r
+  unzip("activity.zip")
+  data <- read.csv("activity.csv", colClasses=c("numeric","Date","numeric"))
+  summary(data)
+```
+
+```
+##      steps             date               interval     
+##  Min.   :  0.00   Min.   :2012-10-01   Min.   :   0.0  
+##  1st Qu.:  0.00   1st Qu.:2012-10-16   1st Qu.: 588.8  
+##  Median :  0.00   Median :2012-10-31   Median :1177.5  
+##  Mean   : 37.38   Mean   :2012-10-31   Mean   :1177.5  
+##  3rd Qu.: 12.00   3rd Qu.:2012-11-15   3rd Qu.:1766.2  
+##  Max.   :806.00   Max.   :2012-11-30   Max.   :2355.0  
+##  NA's   :2304
+```
+However, the data has a small problem. The interval data looks numeric but it isn't exactly. The data is actually a numeric version of the timestamp in the format "HHMM" interpreted as an integer, which causes some problems. For example, interval 50 and 55 are 5 minutes apart and 5 apart numerically. However, interval 55 and 100 are also 5 minutes apart but 45 apart numerically. Thus we have to add another column to the data to reflect the "true" time in a numerically consistent manner. The "minutes_since_midnight" column will do just that. We also declare a function to convert it back to a human readable string, which will be useful for later.
 
 
 ```r
-#Load the data (i.e. read.csv())
-df <- read.csv("activity.csv")
-
-#Process/transform the data (if necessary) into a format suitable for your analysis
-df$date <- as.Date(df$date)
+  time <- sprintf("%04d", data$interval)
+  data$minutes_since_midnight <- (60 * as.numeric(substr(time, 1, 2))) + (as.numeric(substr(time, 3, 4)))
+  minutes_to_time <- function(x) paste(x%/%60, sprintf("%02d",x%%60), sep=":")
 ```
-
 
 ## What is mean total number of steps taken per day?
-
-
-```r
-#histogram of the total number of steps taken each day
-library(ggplot2)
-total.steps.by.day <- aggregate(x = df$steps , by = list(df$date), FUN = sum ,na.rm=TRUE)
-names(total.steps.by.day) <- c("date","steps")
-ggplot(total.steps.by.day,aes(x = steps)) +
-            ggtitle("Histogram of daily steps") +
-            xlab("Steps (binwidth 2000)") +
-            geom_histogram(binwidth = 2000)
-```
-
-![](PA1_template_files/figure-html/unnamed-chunk-2-1.png) 
-
-
+For the initial measurements, NA values are simply ignored.
 
 ```r
-#mean total number of steps taken per day
-mean(total.steps.by.day$steps , na.rm = TRUE)
+  library(ggplot2)
+  total_steps_by_date <- aggregate(steps ~ date, data, FUN=sum, na.rm=TRUE, na.action=na.pass)
+  mean_steps <- mean(total_steps_by_date$steps)
+  median_steps <- median(total_steps_by_date$steps)
+  ggplot(total_steps_by_date, aes(x=steps)) + geom_histogram(binwidth=2000) +
+  geom_vline(aes(xintercept=mean_steps, color="Mean", linetype="Mean"), show_guide=TRUE) +
+  geom_vline(aes(xintercept=median_steps, color="Median", linetype="Median"), show_guide=TRUE) +
+  labs(x="Total Steps", y = "Days (Count)", title="Frequency of Total Daily Step Counts (Binsize: 2000)") +
+  theme(legend.title=element_blank())
 ```
 
-```
-## [1] 9354.23
-```
+![](figure/mean_median-1.png) 
 
-```
-## [1] 9354
-```
-
-
-```r
-#median total number of steps taken per day
-median(total.steps.by.day$steps , na.rm = TRUE)
-```
-
-```
-## [1] 10395
-```
-
-```
-## [1] 10395
-```
+The mean number of steps taken per day is **9354**.  
+The median number of steps taken per day is **10395**.
 
 ## What is the average daily activity pattern?
 
-
 ```r
-#Time series plot of 5-minute interval and the average number of steps taken, averaged across all days
-average.steps.by.interval  <- aggregate(x = df$steps , by = list(df$interval), FUN = mean ,na.rm=TRUE)
-names(average.steps.by.interval) <- c("interval","steps")
+  mean_steps_by_interval <- aggregate(steps ~ interval, data, FUN=mean, na.rm=TRUE, na.action=na.pass)
+  max_interval <- mean_steps_by_interval[which.max(mean_steps_by_interval$steps), 'interval']
+  # Convert the interval "number" to print it nicely as a time
+  max_interval <- sprintf("%04d", max_interval)
+  max_interval <- paste(as.numeric(substr(max_interval, 1, 2)), substr(max_interval, 3, 4), sep=":")
 
-avg.step.line <- ggplot(average.steps.by.interval,aes(interval,steps)) +
-                 ggtitle("Time Series Plot of Average Steps by Interval") +
-                 geom_line()
-avg.step.line  
+  ggplot(data, aes(x=minutes_since_midnight, y=steps)) + stat_summary(fun.y="mean", geom="line", na.rm=TRUE) +
+  scale_x_continuous(labels=minutes_to_time, breaks=c(0, 360, 720, 1080, 1440)) +
+  labs(x="Interval", y="Average Steps", title="Average Steps By Interval")
 ```
 
-![](PA1_template_files/figure-html/unnamed-chunk-5-1.png) 
+![](figure/daily_activity-1.png) 
 
-
-
-```r
-#The 5-min time interval contains the maximum number of steps?
-average.steps.by.interval[which.max(average.steps.by.interval$steps),c("interval")]
-```
-
-```
-## [1] 835
-```
-
-```
-## [1] 835
-```
-
+The interval with the highest mean stepcount is  **8:35**.  
 
 ## Imputing missing values
 
-
 ```r
-#total number of missing values in the dataset
-nrow(df[is.na(df$steps),])
+  missing_count <- sum(is.na(data))
 ```
+Unfortunately the data is missing quite a few values, **2304** to be exact.
 
-```
-## [1] 2304
-```
-
-```
-## [1] 2304
-```
-
-
-```r
-#imputing missing step values with mean step at time interval
-df.imputed <- merge(x = df, y = average.steps.by.interval, by = "interval", all.x = TRUE)
-df.imputed[is.na(df.imputed$steps.x),c("steps.x")] <- df.imputed[is.na(df.imputed$steps.x),c("steps.y")]
-
-#cleaning data
-df.imputed$date <- as.Date(df.imputed$date)
-df.imputed$date.x <- NULL
-df.imputed$Group.1 <- NULL
-df.imputed$steps <- df.imputed$steps.x
-df.imputed$steps.x <- NULL
-df.imputed$steps.y <- NULL
-
-#histogram with new dataframe
-total.steps.by.day <- aggregate(x = df.imputed$steps , by = list(df.imputed$date), FUN = sum ,na.rm=TRUE)
-names(total.steps.by.day) <- c("date","steps")
-histplot <- ggplot(total.steps.by.day,aes(x = steps)) +
-            ggtitle("Histogram of daily steps after imputation") +
-            xlab("Steps (binwidth 2000)") +
-            geom_histogram(binwidth = 2000)
-histplot 
-```
-
-![](PA1_template_files/figure-html/unnamed-chunk-8-1.png) 
+Missing data is filled in by taking the average for that interval accross days. This seems more appropriate than taking the average for the day as the
+average steps taken at different intervals varies by multiple orders of magnitude.
 
 
 
 ```r
-#mean total number of steps taken per day
-mean(total.steps.by.day$steps , na.rm = TRUE)
+  filled <- data
+  mean_steps_by_interval_filled <- aggregate(steps ~ interval, filled, FUN=mean, na.rm=TRUE, na.action=na.pass)
+  filled$steps <- as.numeric(apply(filled, 1, function(row){
+    if(is.na(row['steps'])){
+      row['steps'] <- mean_steps_by_interval_filled[mean_steps_by_interval_filled$interval == as.numeric(row['interval']),]$steps
+    } else {
+      row['steps']
+    }
+  }))
+  total_steps_by_date_filled <- aggregate(steps ~ date, filled, FUN=sum, na.rm=TRUE, na.action=na.pass)
+  mean_steps_filled <- mean(total_steps_by_date_filled$steps)
+  median_steps_filled <- median(total_steps_by_date_filled$steps)
+  ggplot(total_steps_by_date_filled, aes(x=steps)) + geom_histogram(binwidth=2000) +
+  geom_vline(aes(xintercept=mean_steps_filled, color="Mean", linetype="Mean"), show_guide=TRUE) +
+  geom_vline(aes(xintercept=median_steps_filled, color="Median", linetype="Median"), show_guide=TRUE) +
+  labs(x="Total Steps", y = "Days (Count)", title="Frequency of Total Daily Step Counts (Binsize: 2000)") +
+  theme(legend.title=element_blank())
 ```
 
-```
-## [1] 10766.19
-```
+![](figure/add_missing-1.png) 
 
-```
-## [1] 10766
-```
+The mean and median steps taken per day changes as a result and the mean and median in the new data set are the same, which is unsuprising as replacing missing days of data with mean values inflates the frequency of the average case.
 
-
-```r
-#median total number of steps taken per day
-median(total.steps.by.day$steps , na.rm = TRUE)
-```
-
-```
-## [1] 10766.19
-```
-
-```
-## [1] 10766
-```
-
+The new mean number of steps taken per day is **10766**.  
+The new median number of steps taken per day is **10766**.
 
 ## Are there differences in activity patterns between weekdays and weekends?
-
+To calculate this, a new column must first be added to the filled data set to indicate wether a record corresponds to a weekday or not.
 
 ```r
-#Factor variable with two levels indicating a weekday or weekend.
-df.imputed$weekday <- as.factor(ifelse(weekdays(df.imputed$date) %in% c("Saturday","Sunday"), "Weekend", "Weekday")) 
-
-average.steps.by.interval.and.weekday  <- aggregate(x = df.imputed$steps , 
-                                                    by = list(df.imputed$interval,df.imputed$weekday), FUN = mean ,na.rm=TRUE)
-names(average.steps.by.interval.and.weekday) <- c("interval","weekday","steps")
-
-#panel time series plot of the 5-minute interval and the average number of steps taken 
-#averaged across all weekday days or weekend days.
-avg.step.line <- ggplot(average.steps.by.interval.and.weekday,aes(interval,steps)) +
-                 ggtitle("Time Series Plot of Average Steps by Interval after Imputation") +
-                 facet_grid(. ~ weekday) +
-                 geom_line(size = 1)
-avg.step.line  
+  filled$weekend <- as.factor(sapply(weekdays(data$date), function(day){
+    if(day == "Saturday" || day == "Sunday"){
+      "Weekend"
+    }else{
+      "Weekday"
+    }
+  }, USE.NAMES = FALSE))
 ```
 
-![](PA1_template_files/figure-html/unnamed-chunk-11-1.png) 
+Then the data is graphed seperately for weekdays and weekends.
 
+```r
+  ggplot(filled, aes(x=minutes_since_midnight, y=steps)) + stat_summary(fun.y="mean", geom="line", na.rm=TRUE) +
+  facet_wrap(~weekend, ncol = 1) +
+  scale_x_continuous(labels=minutes_to_time, breaks=c(0, 360, 720, 1080, 1440)) +
+  labs(x="Interval", y="Average Steps", title="Average Steps By Interval")
+```
+
+![](figure/weekend_activity-1.png) 
+
+Unsuprisingly the weekday data has more spikes to it due to the timing of the workday while weekend data is generally more consistent throughout the day.

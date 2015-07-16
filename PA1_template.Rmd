@@ -2,8 +2,9 @@
 title: "Reproducible Research: Peer Assessment 1"
 author: "Geoffrey Esposito"
 date: "07/13/2015"
-output: html_document
-keep_md: true
+output: 
+  html_document:
+    keep_md: true
 ---
 
 First, set some options.
