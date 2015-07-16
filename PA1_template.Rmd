@@ -13,13 +13,19 @@ First, set some options.
 ```
 
 ## Loading and preprocessing the data
-The data is read in from the provided CSV file. No additional preprocessing is performed on it.
+First, the data is read in from the provided CSV file. 
 ```{r read_data}
   unzip("activity.zip")
   data <- read.csv("activity.csv", colClasses=c("numeric","Date","numeric"))
   summary(data)
 ```
+However, the data has a small problem. The interval data looks numeric but it isn't exactly. The data is actually a numeric version of the timestamp in the format "HHMM" interpreted as an integer, which causes some problems. For example, interval 50 and 55 are 5 minutes apart and 5 apart numerically. However, interval 55 and 100 are also 5 minutes apart but 45 apart numerically. Thus we have to add another column to the data to reflect the "true" time in a numerically consistent manner. The "minutes_since_midnight" column will do just that. We also declare a function to convert it back to a human readable string, which will be useful for later.
 
+```{r fix_times}
+  time <- sprintf("%04d", data$interval)
+  data$minutes_since_midnight <- (60 * as.numeric(substr(time, 1, 2))) + (as.numeric(substr(time, 3, 4)))
+  minutes_to_time <- function(x) paste(x%/%60, sprintf("%02d",x%%60), sep=":")
+```
 
 ## What is mean total number of steps taken per day?
 For the initial measurements, NA values are simply ignored.
@@ -40,10 +46,18 @@ The median number of steps taken per day is **`r sprintf( "%.0f",median_steps)`*
 
 ## What is the average daily activity pattern?
 ```{r daily_activity}
-  ggplot(data, aes(x=interval, y=steps)) + stat_summary(fun.y="mean", geom="line", na.rm=TRUE) +
+  mean_steps_by_interval <- aggregate(steps ~ interval, data, FUN=mean, na.rm=TRUE, na.action=na.pass)
+  max_interval <- mean_steps_by_interval[which.max(mean_steps_by_interval$steps), 'interval']
+  # Convert the interval "number" to print it nicely as a time
+  max_interval <- sprintf("%04d", max_interval)
+  max_interval <- paste(as.numeric(substr(max_interval, 1, 2)), substr(max_interval, 3, 4), sep=":")
+
+  ggplot(data, aes(x=minutes_since_midnight, y=steps)) + stat_summary(fun.y="mean", geom="line", na.rm=TRUE) +
+  scale_x_continuous(labels=minutes_to_time, breaks=c(0, 360, 720, 1080, 1440)) +
   labs(x="Interval", y="Average Steps", title="Average Steps By Interval")
 ```
 
+The interval with the highest mean stepcount is  **`r max_interval`**.  
 
 ## Imputing missing values
 ```{r count_missing}
@@ -57,10 +71,10 @@ average steps taken at different intervals varies by multiple orders of magnitud
 
 ```{r add_missing}
   filled <- data
-  mean_steps_by_interval <- aggregate(steps ~ interval, filled, FUN=mean, na.rm=TRUE, na.action=na.pass)
+  mean_steps_by_interval_filled <- aggregate(steps ~ interval, filled, FUN=mean, na.rm=TRUE, na.action=na.pass)
   filled$steps <- as.numeric(apply(filled, 1, function(row){
     if(is.na(row['steps'])){
-      row['steps'] <- mean_steps_by_interval[mean_steps_by_interval$interval == as.numeric(row['interval']),]$steps
+      row['steps'] <- mean_steps_by_interval_filled[mean_steps_by_interval_filled$interval == as.numeric(row['interval']),]$steps
     } else {
       row['steps']
     }
@@ -94,8 +108,9 @@ To calculate this, a new column must first be added to the filled data set to in
 
 Then the data is graphed seperately for weekdays and weekends.
 ```{r weekend_activity}
-  ggplot(filled, aes(x=interval, y=steps)) + stat_summary(fun.y="mean", geom="line", na.rm=TRUE) +
+  ggplot(filled, aes(x=minutes_since_midnight, y=steps)) + stat_summary(fun.y="mean", geom="line", na.rm=TRUE) +
   facet_wrap(~weekend, ncol = 1) +
+  scale_x_continuous(labels=minutes_to_time, breaks=c(0, 360, 720, 1080, 1440)) +
   labs(x="Interval", y="Average Steps", title="Average Steps By Interval")
 ```
 
